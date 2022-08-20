@@ -2,7 +2,7 @@
 This repository contains the source code for the Water Body Extraction notebook on [Machine Learning With Julia](https://juliamltutorials.github.io/).
 
 # Prepared Data
-The dataset used in the notebook can be downloaded from [Google Drive](https://drive.google.com/file/d/1X7A0R95vUI8YTn7ZcgiZGXkLKR-OEFGk/view?usp=sharing).
+The dataset used in this notebook can be downloaded from [Google Drive](https://drive.google.com/file/d/1X7A0R95vUI8YTn7ZcgiZGXkLKR-OEFGk/view?usp=sharing).
 
 # Data Source
 The initial dataset was sourced from [Sentinel-2-Water-Segmentation](https://github.com/SCoulY/Sentinel-2-Water-Segmentation) and was collected for the paper [Deep-Learning-Based Multispectral Satellite Image Segmentation for Water Body Detection](https://ieeexplore.ieee.org/document/9492784).
