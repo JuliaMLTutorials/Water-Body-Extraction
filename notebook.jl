@@ -95,17 +95,23 @@ end;
 # ╔═╡ 0025f82d-9b69-4761-8fca-7521a788c448
 function plot_samples(nsamples)
 	samples = rand(1:nsamples, 3)
+	samples = [1353, 1274, 520]
 	plots = [plot_sample(sample) for sample in samples]
 	showimg(plots, (3, 1), (4000, 3300))
 end;
 
 # ╔═╡ 84a678d9-890e-41b4-9076-c391da7f0660
-plot_samples(400)
+plot_samples(1600)
 
 # ╔═╡ 85343345-a11f-4f77-85e0-708c1a5cc7cc
+# ╠═╡ disabled = true
+#=╠═╡
 abstract type AbstractPatch end;
+  ╠═╡ =#
 
 # ╔═╡ 509dbb7a-2cde-4810-9541-df0cfa37ff77
+# ╠═╡ disabled = true
+#=╠═╡
 begin 
 	struct FourPatch <: AbstractPatch
 		coords::Vector{Tuple{Int64, Int64}}
@@ -119,8 +125,11 @@ begin
 		return img[row:row+511,col:col+511,:]
 	end
 end;
+  ╠═╡ =#
 
 # ╔═╡ dcec97b7-3933-422d-81c9-39074fd1184f
+# ╠═╡ disabled = true
+#=╠═╡
 begin 
 	struct NinePatch <: AbstractPatch 
 		coords::Vector{Tuple{Int64, Int64}}
@@ -135,22 +144,31 @@ begin
 	end
 end;
 
+  ╠═╡ =#
 
 # ╔═╡ 77c1202f-d367-4f29-8869-84eeb598a142
+# ╠═╡ disabled = true
+#=╠═╡
 function plot_four_patch(tile::Array{Float32,3}, plot_function::Function)
 	p = FourPatch()
 	plots = [plot_function(p(tile, i)) for i in 1:4]
 	showimg(plots, (2, 2), (1000, 1000))
 end;
+  ╠═╡ =#
 
 # ╔═╡ 5c0e367c-1509-4c5b-aba6-56ccf3403e62
+# ╠═╡ disabled = true
+#=╠═╡
 function plot_nine_patch(tile::Array{Float32,3}, plot_function::Function)
 	p = NinePatch()
 	plots = [plot_function(p(tile, i)) for i in 1:9]
 	showimg(plots, (3, 3), (1000, 1000))
 end;
+  ╠═╡ =#
 
 # ╔═╡ 5fef43ca-7cd4-45a8-ac85-a5633c655606
+# ╠═╡ disabled = true
+#=╠═╡
 function show_patching_strategies(tile::Int)	
 	# Plot Inital Tiles
 	rgb_plot_tile = @pipe read_rgb(tile) |> plot_color |> put_title!(_, "RGB")
@@ -178,9 +196,12 @@ function show_patching_strategies(tile::Int)
 	]
 	plot(plots..., layout=(3, 4), size=(4000, 3100))
 end;
+  ╠═╡ =#
 
 # ╔═╡ c4f4a3c6-d1d2-4606-b178-a9ac45c03e37
+#=╠═╡
 show_patching_strategies(255)
+  ╠═╡ =#
 
 # ╔═╡ 2a788793-86cf-49c7-98b0-a8c16e536910
 function onehot_mask(mask::Array{Float32,4}, nclasses::Int)
@@ -194,29 +215,13 @@ function onehot_mask(mask::Array{Float32,4}, nclasses::Int)
 end;
 
 # ╔═╡ 439cad39-729f-4342-bfaf-4fe23ec860f4
-begin
-	"A struct representing a pipeline for a selection of patches."
-	struct ImagePipeline{T <: AbstractPatch}
-		patches::Vector{Int}
-		patching_strategy::T
-	end
-
-	"ImagePipeline constructor for non-overlapping patching strategy."
-	function ImagePipeline(tiles::Vector{Int}, patching_strategy::FourPatch)
-		patches = [tile * 10 + patch for tile in tiles for patch in 1:4]
-		ImagePipeline{FourPatch}(patches, patching_strategy)
-	end
-
-	"ImagePipeline constructor for non-overlapping patching strategy."
-	function ImagePipeline(tiles::Vector{Int}, patching_strategy::NinePatch)
-		patches = [tile * 10 + patch for tile in tiles for patch in 1:9]
-		ImagePipeline{NinePatch}(patches, patching_strategy)
-	end
-end;
+struct ImagePipeline
+    tiles::Vector{Int}
+end
 
 # ╔═╡ 5c46e24e-70ee-4dd7-acf2-0276a1e35c90
 function Base.length(X::ImagePipeline)
-	return length(X.patches)
+	return length(X.tiles)
 end
 
 # ╔═╡ bee40b4b-544f-4db8-bb22-23c9639d30bf
@@ -316,7 +321,7 @@ end;
 # ╔═╡ a9b0bddc-954d-48c5-8fbb-0bffe1b2efba
 begin
 	# Load Data
-	data = ImagePipeline([i for i in 200:300], FourPatch())
+	data = ImagePipeline([i for i in 1000:1001])
 	train_data = DataLoader(data, batchsize=1)
 	
 	# Define Loss Function
@@ -406,16 +411,14 @@ end
 # ╔═╡ adaf4997-6522-4b09-8fa7-da541c402856
 function Base.getindex(X::ImagePipeline, i::Union{<:AbstractArray,Int})
     i = i isa AbstractArray ? i : [i]
-	patches = X.patches[i]
+	tiles = X.tiles[i]
 	xs = zeros(Float32, (512, 512, 5, length(i)))
 	ys = zeros(Float32, (512, 512, 1, length(i)))
-	@Threads.threads for (obs, patch) in collect(enumerate(patches))
-		patch_index = patch % 10
-		tile = patch ÷ 10
-		rgb = @pipe read_rgb(tile) |> X.patching_strategy(_, patch_index)
-		nir = @pipe read_nir(tile) |> X.patching_strategy(_, patch_index)
-		swir = @pipe read_swir(tile) |> X.patching_strategy(_, patch_index)
-		mask = @pipe read_mask(tile) |> X.patching_strategy(_, patch_index)
+	@Threads.threads for (obs, tile) in collect(enumerate(tiles))
+		rgb = @pipe read_rgb(tile)
+		nir = @pipe read_nir(tile)
+		swir = @pipe read_swir(tile)
+		mask = @pipe read_mask(tile)
 		xs[:,:,1:3,obs] .= rgb
 		xs[:,:,4,obs] .= nir
 		xs[:,:,5,obs] .= swir
@@ -441,9 +444,12 @@ md"""
 """
 
 # ╔═╡ 260d8306-b612-4eb8-995f-b34551be7a58
+# ╠═╡ disabled = true
+#=╠═╡
 md"""
 # Define Patching Strategies
 """
+  ╠═╡ =#
 
 # ╔═╡ 5f960df2-9dcc-43d8-b162-908d0053c01c
 md"""
@@ -2286,15 +2292,15 @@ version = "1.4.1+0"
 # ╠═90ab5f98-91d9-4b6e-8499-83e00fd3568a
 # ╠═13c5a2a8-0976-4a11-a7de-707f4d3ec13a
 # ╠═0025f82d-9b69-4761-8fca-7521a788c448
-# ╟─84a678d9-890e-41b4-9076-c391da7f0660
+# ╠═84a678d9-890e-41b4-9076-c391da7f0660
 # ╟─260d8306-b612-4eb8-995f-b34551be7a58
-# ╠═85343345-a11f-4f77-85e0-708c1a5cc7cc
-# ╠═509dbb7a-2cde-4810-9541-df0cfa37ff77
-# ╠═dcec97b7-3933-422d-81c9-39074fd1184f
+# ╟─85343345-a11f-4f77-85e0-708c1a5cc7cc
+# ╟─509dbb7a-2cde-4810-9541-df0cfa37ff77
+# ╟─dcec97b7-3933-422d-81c9-39074fd1184f
 # ╟─5f960df2-9dcc-43d8-b162-908d0053c01c
-# ╠═77c1202f-d367-4f29-8869-84eeb598a142
-# ╠═5c0e367c-1509-4c5b-aba6-56ccf3403e62
-# ╠═5fef43ca-7cd4-45a8-ac85-a5633c655606
+# ╟─77c1202f-d367-4f29-8869-84eeb598a142
+# ╟─5c0e367c-1509-4c5b-aba6-56ccf3403e62
+# ╟─5fef43ca-7cd4-45a8-ac85-a5633c655606
 # ╟─c4f4a3c6-d1d2-4606-b178-a9ac45c03e37
 # ╟─1b5a025f-4900-4977-8f7d-72bd5679e932
 # ╠═2a788793-86cf-49c7-98b0-a8c16e536910

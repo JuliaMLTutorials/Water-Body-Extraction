@@ -41,6 +41,6 @@ function make_tiles()
    end
 end
 
-# main = make_tiles()
+main = make_tiles()
 
 end

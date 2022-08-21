@@ -1,12 +1,6 @@
 using Plots, Images, ArchGDAL, Flux, Augmentor, MLUtils, UNet, CUDA, Random, ProgressBars
 using Pipe: @pipe
 
-function (p::FourPatch)(img::Array{Float32, 3}, patch::Int)
-    @assert 1 <= patch <= 4
-    row, col = p.coords[patch]
-    return img[row:row+511,col:col+511,:]
-end
-
 function read_rgb(tile::Int)::Array{Float32,3}
 	img = ArchGDAL.readraster("data/rgb/rgb.$tile.tif")[:,:,:]
 	scale = Float32(findmax(img)[1])
@@ -54,12 +48,16 @@ end
 function Base.getindex(X::ImagePipeline, i::Union{<:AbstractArray,Int})
     i = i isa AbstractArray ? i : [i]
 	tiles = X.tiles[i]
-	xs = zeros(Float32, (512, 512, 1, length(i)))
+	xs = zeros(Float32, (512, 512, 5, length(i)))
 	ys = zeros(Float32, (512, 512, 1, length(i)))
 	@Threads.threads for (obs, tile) in collect(enumerate(tiles))
+		rgb = @pipe read_rgb(tile)
 		nir = @pipe read_nir(tile)
+		swir = @pipe read_swir(tile)
 		mask = @pipe read_mask(tile)
-		xs[:,:,1,obs] .= nir
+		xs[:,:,1:3,obs] .= rgb
+		xs[:,:,4,obs] .= nir
+		xs[:,:,5,obs] .= swir
 		ys[:,:,1,obs] .= mask
 	end
     return xs |> gpu, onehot_mask(ys, 2) |> gpu
@@ -73,12 +71,12 @@ function dice_loss(ŷ::AbstractArray{Float32, 4}, y::AbstractArray{Float32, 4})
 end
 
 function get_model()
-    Chain(Unet(1, 2), x -> softmax(x, dims=3)) |> gpu
+    Chain(Unet(5, 2), x -> softmax(x, dims=3)) |> gpu
 end
 
 function train_model(model)
 	# Load Data
-    tiles = [i for i in 100:400]
+    tiles = [i for i in 600:1600]
     shuffle!(tiles)
 	data = ImagePipeline(tiles)
 	train_data = DataLoader(data, batchsize=1)
