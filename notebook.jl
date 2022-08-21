@@ -10,8 +10,17 @@ using Plots, Images, ArchGDAL, Flux, Augmentor, MLUtils
 # ╔═╡ 2492c075-185c-437f-a721-920e887fb871
 using Pipe: @pipe
 
+# ╔═╡ c291f91f-2d0b-4a1d-bd5b-f83afa915107
+begin
+	using CUDA
+	CUDA.functional() |> println
+end
+
 # ╔═╡ 1f21ec00-d59e-4142-a153-af4f258be26d
 using UNet
+
+# ╔═╡ 0f11cfa0-3e89-4bc1-90ff-02f52b5fc4b1
+using ProgressBars, ProgressMeter
 
 # ╔═╡ c26ac38f-02be-42d4-a2cd-5b0fa8e50cfe
 function read_rgb(tile::Int)::Array{Float32,3}
@@ -211,7 +220,7 @@ function Base.length(X::ImagePipeline)
 end
 
 # ╔═╡ bee40b4b-544f-4db8-bb22-23c9639d30bf
-model = Chain(Unet(5, 2), x -> softmax(x, dims=3));
+model = Chain(Unet(1, 2), x -> softmax(x, dims=3)) |> gpu;
 
 # ╔═╡ 626759bb-d786-4ac0-b85b-8d0de36995dc
 function prediction_to_mask(ŷ::Array{<:AbstractFloat,4})
@@ -235,14 +244,14 @@ end;
 
 # ╔═╡ ae9d1224-a9a2-4d2f-a2df-0bc99839b4cd
 begin
-	function dice_loss(ŷ::Vector{<:AbstractFloat}, y::Vector{<:AbstractFloat})
+	function dice_loss(ŷ::AbstractArray{Float32, 1}, y::AbstractArray{Float32, 1})
 		intersection = sum(ŷ .* y)
 		union = sum(ŷ) + sum(y)
 		dice_coefficient = (2.0f0 * intersection) / union
 		return 1.0f0 - (dice_coefficient)
 	end
 
-	function dice_loss(ŷ::Array{<:AbstractFloat,4}, y::Array{<:AbstractFloat,4})
+	function dice_loss(ŷ::AbstractArray{Float32, 4}, y::AbstractArray{Float32, 4})
 		dice_loss(flatten(ŷ[:,:,2,:]), flatten(y[:,:,2,:]))
 	end
 end;
@@ -307,7 +316,7 @@ end;
 # ╔═╡ a9b0bddc-954d-48c5-8fbb-0bffe1b2efba
 begin
 	# Load Data
-	data = ImagePipeline([i for i in 255:255], FourPatch())
+	data = ImagePipeline([i for i in 200:300], FourPatch())
 	train_data = DataLoader(data, batchsize=1)
 	
 	# Define Loss Function
@@ -322,8 +331,10 @@ end;
 
 # ╔═╡ 54c44b1f-3f35-4962-b59d-f68c0b8502a0
 begin
-	# Train For Two Epochs
-	for epoch in 1:2
+	# Train For Two Epoch
+	i = 0
+	l = 0.0f0
+	for epoch in 1:1
 	
 		for (x, y) in train_data
 
@@ -332,10 +343,10 @@ begin
 
         	# Update Parameters
         	Flux.Optimise.update!(opt, params, grads)
-		
-			# p = model(x)
-			l = loss(x, y)
-			println("Type Of Loss: $(typeof(l)), Loss: $l")
+
+			i += 1
+			l += loss(x, y)
+			println("Total: $l, Loss: $(l / Float32(i))")
 		
 		end
 
@@ -344,7 +355,6 @@ begin
 end
 
 # ╔═╡ d24555af-5ec9-43af-a364-9574a7ec9f5f
-# ╠═╡ show_logs = false
 begin
 	y_true = [1.0, 1.0, 1.0, 0.0]
 	y_pred = [1.0, 0.0, 1.0, 1.0]
@@ -411,8 +421,14 @@ function Base.getindex(X::ImagePipeline, i::Union{<:AbstractArray,Int})
 		xs[:,:,5,obs] .= swir
 		ys[:,:,1,obs] .= mask
 	end
-    return xs, onehot_mask(ys, 2)
+    return xs[:,:,4:4,:] |> gpu, onehot_mask(ys, 2) |> gpu
 end
+
+# ╔═╡ 27caf607-df1e-45a1-a4e8-2d5394de5b53
+md"""
+# Confirm GPU Is Available
+To speed up training, we want to confirm that GPU accelerated learning is enabled. To do so, we simply import the `CUDA` module and call `CUDA.functional()`, which will return `true` if GPU acceleration is available and `false` otherwise. If you are unable to use GPU acceleration, you should still be able to run this notebook without making any changes. However, training time will be increased by an order of magnitude. In such a case, you could try training on a smaller portion of the dataset to reduce this time.
+"""
 
 # ╔═╡ d4d3b5b4-6374-43f2-b53c-c664ba8e0b8b
 md"""
@@ -468,21 +484,27 @@ PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 ArchGDAL = "c9ce4bd3-c3d5-55b8-8973-c0e20141b8c3"
 Augmentor = "02898b10-1f73-11ea-317c-6393d7073e15"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
 Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
 MLUtils = "f1d291b0-491e-4a28-83b9-f70985020b54"
 Pipe = "b98c9c47-44ae-5843-9183-064241ee97a0"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+ProgressBars = "49802e3a-d2f1-5c88-81d8-b72133a6f568"
+ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 UNet = "0d73aaa9-994a-4556-95d0-da67cb772a03"
 
 [compat]
 ArchGDAL = "~0.9.1"
 Augmentor = "~0.6.6"
+CUDA = "~3.12.0"
 Flux = "~0.12.10"
 Images = "~0.24.1"
 MLUtils = "~0.2.10"
 Pipe = "~1.3.0"
 Plots = "~1.31.7"
+ProgressBars = "~1.4.1"
+ProgressMeter = "~1.7.2"
 UNet = "~0.2.1"
 """
 
@@ -1666,6 +1688,18 @@ uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 deps = ["Printf"]
 uuid = "9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"
 
+[[deps.ProgressBars]]
+deps = ["Printf"]
+git-tree-sha1 = "806ebc92e1b4b4f72192369a28dfcaf688566b2b"
+uuid = "49802e3a-d2f1-5c88-81d8-b72133a6f568"
+version = "1.4.1"
+
+[[deps.ProgressMeter]]
+deps = ["Distributed", "Printf"]
+git-tree-sha1 = "d7a7aef8f8f2d537104f170139553b14dfe39fe9"
+uuid = "92933f4c-e287-5a05-a399-4b506db050ca"
+version = "1.7.2"
+
 [[deps.Qt5Base_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Fontconfig_jll", "Glib_jll", "JLLWrappers", "Libdl", "Libglvnd_jll", "OpenSSL_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libxcb_jll", "Xorg_xcb_util_image_jll", "Xorg_xcb_util_keysyms_jll", "Xorg_xcb_util_renderutil_jll", "Xorg_xcb_util_wm_jll", "Zlib_jll", "xkbcommon_jll"]
 git-tree-sha1 = "c6c0f690d0cc7caddb74cef7aa847b824a16b256"
@@ -2239,6 +2273,8 @@ version = "1.4.1+0"
 # ╔═╡ Cell order:
 # ╠═94cee118-9492-4314-ba64-1c1adef1f53f
 # ╠═2492c075-185c-437f-a721-920e887fb871
+# ╟─27caf607-df1e-45a1-a4e8-2d5394de5b53
+# ╠═c291f91f-2d0b-4a1d-bd5b-f83afa915107
 # ╟─d4d3b5b4-6374-43f2-b53c-c664ba8e0b8b
 # ╠═c26ac38f-02be-42d4-a2cd-5b0fa8e50cfe
 # ╠═9564049a-3afa-4340-9d26-7949d441fe12
@@ -2283,6 +2319,7 @@ version = "1.4.1+0"
 # ╠═07151940-e03a-493d-965d-40a6da92dd22
 # ╟─1172e97b-9837-4074-a622-4dddbf74e1ce
 # ╠═a9b0bddc-954d-48c5-8fbb-0bffe1b2efba
+# ╠═0f11cfa0-3e89-4bc1-90ff-02f52b5fc4b1
 # ╠═54c44b1f-3f35-4962-b59d-f68c0b8502a0
 # ╠═d24555af-5ec9-43af-a364-9574a7ec9f5f
 # ╠═39fd7596-aecd-4904-b019-a4b5b11417e6
