@@ -2,3 +2,5 @@ data/
 .DS_Store
 data.tar.gz
 samples.png
+images/
+models/
