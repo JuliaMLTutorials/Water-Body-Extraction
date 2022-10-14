@@ -493,7 +493,7 @@ function prediction_to_mask(ŷ::Array{Float32,4})
 end;
 
 # ╔═╡ 83aef662-41b6-40b2-b952-1c195255ad58
-function show_prediction(model, tile::Int)
+function show_prediction(model, tile::Int, row::Int)
 	# Plot Features
 	rgb_plot = read_rgb(tile) |> plot_color
 	nir_plot = read_nir(tile) |> plot_gray
@@ -501,17 +501,31 @@ function show_prediction(model, tile::Int)
 	mask_plot = read_mask(tile) |> plot_gray
 	
 	# Plot Prediction
-	x, _ = ImagePipeline([tile])[1]
-    prediction_plot = @pipe model(x) |> Array |> prediction_to_mask(_)[:,:,:,1] |> plot_gray
+    prediction_plot = 
+		@pipe ImagePipeline([tile])[1][1] |>
+		model |> 
+		Array |> 
+		prediction_to_mask(_)[:,:,:,1] |> 
+		plot_gray
+
+	# Add Titles To First Row
+	if row == 1
+		rgb_plot = @pipe rgb_plot |> put_title!(_, "RGB")
+		nir_plot = @pipe nir_plot |> put_title!(_, "NIR")
+		swir_plot = @pipe swir_plot |> put_title!(_, "SWIR")
+		mask_plot = @pipe mask_plot |> put_title!(_, "Mask")
+		prediction_plot = @pipe prediction_plot |> put_title!(_, "Prediction")
+	end
 
 	# Plot Features And Prediction
-	showimg([rgb_plot, nir_plot, swir_plot, mask_plot, prediction_plot], (1, 5), (2500, 1000))
+	plots = [rgb_plot, nir_plot, swir_plot, mask_plot, prediction_plot]
+	showimg(plots, (1, 5), (2500, 1000))
 end;
 
 # ╔═╡ e2307d85-2b0b-46a8-9ffd-1e542930f4a4
 function perform_qualitative_analysis()
-	plots = [show_prediction(model, tile) for tile in SAMPLE_TILES]
-	showimg(plots, (7, 1), (2500, 3500))
+	plots = [show_prediction(model, t, r) for (r, t) in enumerate(SAMPLE_TILES)]
+	showimg(plots, (7, 1), (2500, 3600))
 end;
 
 # ╔═╡ e71f9907-59ff-4f0b-a959-649be08a224e
