@@ -4,3 +4,5 @@ data.tar.gz
 samples.png
 images/
 models/
+prediction_*
+.vscode
